@@ -1,96 +1,138 @@
-# 🇭🇰 Hong Kong Border Trafffic Intelligence System (2021–2024)
+ 
 
-A full end-to-end **SQL + Power BI** analytics project analyzing Hong Kong's Control Point passenger traffic trends from **2021 to 2024**, covering the pandemic decline, reopening rebound, and post-recovery normalization.
+-- Count records
+SELECT COUNT(*) FROM border_traffic;
 
----
+-- Check unique control points and directions
+SELECT DISTINCT control_point FROM border_traffic;
+SELECT DISTINCT direction FROM border_traffic;
 
-## 📊 Project Overview
+-- Check date range
+SELECT MIN(date), MAX(date) FROM border_traffic;
 
-This project explores how passenger traffic across Hong Kong's 16 control points.
-Using **PostgreSQL for data analysis** and **Power BI for visualization**, this dashboard reveals trends in passenger growth, visitor composition, and control point performance.
+--Total Pessengers Traffic
+SELECT SUM(total) AS total_passengers FROM border_traffic;
 
----
-
-## 🧠 Key Insights
-
-| Category | Insight |
-|----------|---------|
-| 📅 **Date Range** | Jan 2021 → Dec 2024 (44,328 daily records) |
-| 👥 **Total Passengers** | 517 million+ across all crossings |
-| 📈 **Growth Trends** | 2023 saw a 3924% YoY rebound after border reopening |
-| 🌍 **Visitor Mix** | Hong Kong Residents ~70%, Mainland Visitors ~23%, Others ~7% |
-| 🚉 **Top Crossings** | Lo Wu (109M), Lok Ma Chau Spur Line (96M), Airport (78M) |
-| ⚖️ **Arrivals vs Departures** | 49.98% arrivals vs 50.02% departures — perfectly balanced |
-| 🗓️ **Weekly Patterns** | Highest traffic on weekends (Sat/Sun); lowest midweek (Wed) |
-
----
-
-## 📊 Power BI Dashboard Features
-
-| Visualization | Purpose |
-|---------------|---------|
-| **KPI Cards** | Total Passengers, YoY Growth, Top Control Point, HK Resident Share, Peak Month |
-| **Line Chart** | Monthly traffic trend (2021–2024) |
-| **Bar Chart** | Top 10 busiest control points |
-| **Stacked Bar** | Visitor type composition by month |
-| **Pie Chart** | Visitor distribution (%) |
-| **Column Chart** | Arrivals vs Departures |
-| **Line + Marker Chart** | YoY growth trend |
-| **Matrix Heatmap** | Weekday traffic patterns |
-
----
-
-## 🧩 Data Sources
-
--Statistics on Passenger Traffic of Hong Kong
-from Immigration of HKSAR
-
----
-
-## 🧮 SQL Analysis
-
-All SQL queries used in this project are available in the Queries folder.
-
-### Example: Year-over-Year Growth
-```sql
-SELECT
-    EXTRACT(YEAR FROM date) AS year,
-    SUM(total_passengers) AS total_passengers,
-    ROUND(
-        (SUM(total_passengers) - LAG(SUM(total_passengers)) OVER (ORDER BY EXTRACT(YEAR FROM date))) 
-        / LAG(SUM(total_passengers)) OVER (ORDER BY EXTRACT(YEAR FROM date)) * 100, 2
-    ) AS yoy_growth_percentage
+--Arrival vs Departure
+SELECT direction, SUM(total) AS total_passengers
 FROM border_traffic
-GROUP BY EXTRACT(YEAR FROM date)
+GROUP BY direction
+ORDER BY total_passengers DESC;
+
+--Total by control points
+SELECT control_point, SUM(total) AS total_passengers
+FROM border_traffic
+GROUP BY control_point
+ORDER BY total_passengers DESC;
+
+--Total passengers by month
+SELECT
+    DATE_TRUNC('month', date) AS month,
+    SUM(total) AS total_passengers
+FROM border_traffic
+GROUP BY month
+ORDER BY month;
+
+--Busiest control points (overall)
+SELECT
+    control_point,
+    SUM(total) AS total_traffic
+FROM border_traffic
+GROUP BY control_point
+ORDER BY total_traffic DESC
+LIMIT 10;
+
+
+--Arrival vs Departure Traffic
+SELECT
+    direction,
+    SUM(total) AS total_passengers,
+    ROUND(SUM(total) * 100.0 / (SELECT SUM(total) FROM border_traffic), 2) AS percentage
+FROM border_traffic
+GROUP BY direction;
+
+--Traffic by visitor type
+SELECT
+    'Hong Kong Residents' AS visitor_type,
+    SUM(hk_residents) AS total
+FROM border_traffic
+UNION ALL
+SELECT
+    'Mainland Visitors', SUM(mainland_visitors)
+FROM border_traffic
+UNION ALL
+SELECT
+    'Other Visitors', SUM(other_visitors)
+FROM border_traffic;
+
+--Top 5 control points for arrivals vs departures
+SELECT
+    direction,
+    control_point,
+    SUM(total) AS total_passengers
+FROM border_traffic
+GROUP BY direction, control_point
+ORDER BY direction, total_passengers DESC;
+
+--Monthly growth rate
+WITH monthly AS (
+    SELECT
+        DATE_TRUNC('month', date) AS month,
+        SUM(total) AS total_passengers
+    FROM border_traffic
+    GROUP BY month
+)
+SELECT
+    month,
+    total_passengers,
+    ROUND((total_passengers - LAG(total_passengers) OVER (ORDER BY month)) * 100.0 /
+           LAG(total_passengers) OVER (ORDER BY month), 2) AS growth_rate_percent
+FROM monthly;
+
+--Average daily traffic per control point
+SELECT
+    control_point,
+    ROUND(AVG(total)) AS avg_daily_passengers
+FROM border_traffic
+GROUP BY control_point
+ORDER BY avg_daily_passengers DESC;
+
+--Seasonal pattern detection (weekday analysis)
+SELECT
+    TO_CHAR(date, 'Day') AS weekday,
+    ROUND(AVG(total)) AS avg_passengers
+FROM border_traffic
+GROUP BY weekday
+ORDER BY avg_passengers DESC;
+
+
+--Year on Year traffic comparison
+SELECT
+    DATE_PART('year', date) AS year,
+    SUM(total) AS total_passengers,
+    ROUND(
+        (SUM(total) - LAG(SUM(total)) OVER (ORDER BY DATE_PART('year', date))) * 100.0 /
+         LAG(SUM(total)) OVER (ORDER BY DATE_PART('year', date)), 2
+    ) AS yoy_growth_percent
+FROM border_traffic
+GROUP BY year
 ORDER BY year;
-```
 
-## ⚙️ Tools & Technologies
 
-| Tool | Purpose |
-| :--- | :--- |
-| **PostgreSQL** | Data storage, SQL querying & aggregation |
-| **Power BI** | Dashboard creation & visualization |
-| **Excel / Power Query** | Data cleaning & transformation |
+--KPI's
+SELECT
+    DATE_TRUNC('month', date) AS month,
+    SUM(hk_residents) AS total_hk_residents,
+    SUM(mainland_visitors) AS total_mainland_visitors,
+    SUM(other_visitors) AS total_other_visitors,
+    SUM(total) AS total_passengers,
+    ROUND(SUM(hk_residents) * 100.0 / SUM(total), 2) AS hk_share,
+    ROUND(SUM(mainland_visitors) * 100.0 / SUM(total), 2) AS mainland_share,
+    ROUND(SUM(other_visitors) * 100.0 / SUM(total), 2) AS other_share
+FROM border_traffic
+GROUP BY month
+ORDER BY month;
 
-## 🧠 Learnings & Skills Demonstrated
 
-- **Advanced SQL Aggregation** - CTEs, window functions, and date functions
-- **Data Modeling & Transformation** - Preparing data for BI tools
-- **Power BI Design** - Visual hierarchy and layout design principles
-- **DAX Calculations** - Creating KPIs, calculated measures, and YoY comparisons
-- **Data Storytelling** - Building interactive dashboards for insights
-- **Project Management** - Github Documentation
 
-## 🚀 How to View the Dashboard
 
-1. **Download** the `.pbix` file from the `/PowerBi_Dashboard` directory
-2. **Open** the file in Power BI Desktop (latest version)
-3. **Explore** using the interactive filters for year, control point, and visitor 
-
-## 🧾 Author
-
-**Muhammad Awais** 
-📍 Data Analyst | SQL | Power BI | Excel | Data Visualization  
-🔗 [LinkedIn Profile](https://www.linkedin.com/in/muhammad-awais-40785b346/)  
-📧 [contact21rvt@gmail.com]
